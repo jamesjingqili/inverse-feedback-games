@@ -7,7 +7,7 @@ Julia 1.6.6
 First thing to do:
 1. cd to /src
 2. run: "julia --project"
-3. within Julia REPL terminal interface, run "Import Pkg; Pkg.instantiate()"
+3. within Julia REPL terminal interface, run "import Pkg; Pkg.instantiate()"
 4. copy the codes in "/examples/inverse_2_player_dubins_car.jl" to the Julia REPL terminal interface and wait for results
 
 
