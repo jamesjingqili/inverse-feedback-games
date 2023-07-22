@@ -14,5 +14,5 @@ First thing to do:
 
 
 Important files:
-1. experiment_utils.jl: we defined the loss and the gradient descent in the functions loss() and inverse_game_gradient_descent(), respectively;
+1. experiment_utils.jl: we defined the loss in the function loss(). We defined the alternating gradient descent of theta and x0 in the functions inverse_game_gradient_descent_with_x0();
 2. diff_solver.jl: we removed the type checking in the LQ game solver in iLQGames.jl such that ForwardDiff.jl can evaluate gradient properly. 
