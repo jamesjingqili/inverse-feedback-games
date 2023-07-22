@@ -1,7 +1,7 @@
 # inverse-iLQGames
 This repo contains the essential codes for the following paper:
 
-Li, Jingqi, Chih-Yuan Chiu, Lasse Peters, Somayeh Sojoudi, Claire Tomlin, and David Fridovich-Keil. "Cost Inference for Feedback Dynamic Games from Noisy Partial State Observations and Incomplete Trajectories." arXiv preprint arXiv:2301.01398 (2023).
+Cost Inference for Feedback Dynamic Games from Noisy Partial State Observations and Incomplete Trajectories, by Jingqi Li, Chih-Yuan Chiu, Lasse Peters, Somayeh Sojoudi, Claire Tomlin, and David Fridovich-Keil, AAMAS 2023
 
 Julia version:  1.6.6
 
