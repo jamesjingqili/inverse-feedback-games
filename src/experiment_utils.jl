@@ -4,7 +4,17 @@ using Distributions
 "
 Important functions:
 loss()
+inverse_game_gradient_descent()
 inverse_game_gradient_descent_with_x0()
+
+
+Note that the 'inverse_game_gradient_descent() is an older 
+version of 'inverse_game_gradient_descent_with_x0()', where the former one does not
+support taking gradient descent in x0. The former one only takes gradient descent for θ.
+
+
+The later one takes alternating gradient descent in θ and x0.
+
 
 "
 
