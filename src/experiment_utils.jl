@@ -1,6 +1,12 @@
 using ProgressBars
 using Infiltrator
+using Distributions
+"
+Important functions:
+loss()
+inverse_game_gradient_descent_with_x0()
 
+"
 
 
 function loss(θ, dynamics, equilibrium_type, expert_traj, gradient_mode = true, specified_solver_and_traj = false, 
@@ -11,7 +17,7 @@ function loss(θ, dynamics, equilibrium_type, expert_traj, gradient_mode = true,
     end
     tmp1 = transpose(mapreduce(permutedims, vcat, Vector([Vector(expert_traj.x[t][obs_state_list]) for t in obs_time_list])))
     
-    
+
     if gradient_mode == false
         nominal_game = GeneralGame(game_horizon, player_inputs, dynamics, parameterized_cost(ForwardDiff.value.(θ)))
         nominal_solver = iLQSolver(nominal_game, max_scale_backtrack=10, max_elwise_diff_step=Inf, equilibrium_type=equilibrium_type)
@@ -67,6 +73,13 @@ function inverse_game_gradient_descent(θ::Vector, g::GeneralGame, expert_traj::
                                         specify_current_loss_and_solver=false, current_loss=[], current_traj=[], current_solver=[],
                                         obs_time_list = 1:game_horizon-1, obs_state_list = 1:nx, obs_control_list = 1:nu, initial_step_size=2.0, 
                                         normalization = false, which_example=[],no_control=false)
+    "In this function, we first evaluate the loss function, which involves solve an iLQGames under the currest cost parameters θ.
+    A byproduct is the linearized dynamics f̃ and the quadraticized costs {∑ⱼ θⱼⁱ b̃ⱼⁱ} for each player i.
+    We solve an LQ game with the above linearized dynamics and quadraticized costs, and obtain a linear strategy.
+    We simulate that linear strategy to obtain a new trajectory, and evaluate the loss function again.
+    "
+
+    # initialization
     α, θ_next, new_loss, new_traj, new_solver = initial_step_size, θ, 0.0, zero(SystemTrajectory, g), current_solver
     if Bayesian_belief_update==true
         equilibrium_type = inverse_game_update_belief(θ, g, expert_traj, x0, parameterized_cost, "FBNE_costate", "OLNE_costate")
@@ -124,15 +137,17 @@ function inverse_game_gradient_descent_with_x0(θ::Vector, g::GeneralGame, exper
     if Bayesian_belief_update==true
         equilibrium_type = inverse_game_update_belief(θ, g, expert_traj, x0, parameterized_cost, "FBNE_costate", "OLNE_costate")
     end
+    # evaluate loss function
     if specify_current_loss_and_solver == false
         current_loss, current_traj, current_str, current_solver = loss(θ,iLQGames.dynamics(g), equilibrium_type, expert_traj, false, false,[],[],
                                                                         obs_time_list, obs_state_list, obs_control_list, no_control, true, x0)
     end
+    # evaluate gradient of loss function
     gradient_x0 = ForwardDiff.gradient(x -> loss(θ, iLQGames.dynamics(g), equilibrium_type, expert_traj, true, true, current_solver, current_traj,
                                                                         obs_time_list, obs_state_list, obs_control_list, no_control, true, x), x0 )
     # line search over x0
-    # @infiltrate
     x0_next = x0
+
     for iter in 1:x0_GD_num
         x0_next = x0 - step_size_x0*gradient_x0
         new_loss, new_traj, new_str, new_solver = loss(θ, iLQGames.dynamics(g),equilibrium_type, expert_traj, false, false,[],[],
@@ -358,7 +373,6 @@ function run_experiments_with_baselines(g, θ, x0_set, expert_traj_list, paramet
     return conv_table, sol_table, loss_table, grad_table, equi_table, total_iter_table, comp_time_table
 end
 
-# θ represents the initialization in gradient descent
 
 function run_experiment_x0(g, θ, x0_set, expert_traj_list, parameterized_cost, 
                         max_GD_iteration_num, max_LineSearch_num=15, tol_LineSearch=1e-6,

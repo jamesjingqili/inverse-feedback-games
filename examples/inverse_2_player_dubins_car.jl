@@ -33,15 +33,17 @@ player_inputs = (SVector(1,2), SVector(3,4))
 # the horizon of the game
 g = GeneralGame(game_horizon, player_inputs, dynamics, costs)
 
+
+
 # get a solver, choose initial conditions and solve (in about 9 ms with AD)
-solver1 = iLQSolver(g, max_scale_backtrack=10, max_elwise_diff_step=Inf, equilibrium_type="OLNE_costate")
 x0 = SVector(0, 0.5, pi/2, 1,       1, 0, pi/2, 1,0.0)
 
-c1, expert_traj1, strategies1 = solve(g, solver1, x0)
 
-solver2 = iLQSolver(g, max_scale_backtrack=5, max_elwise_diff_step=Inf, equilibrium_type="FBNE")
-c2, expert_traj2, strategies2 = solve(g, solver2, x0)
+# if we want to solve an LQ game, then consider running the following 2 lines of codes:
+solver = iLQSolver(g, max_scale_backtrack=5, max_elwise_diff_step=Inf, equilibrium_type="FBNE")
+c, expert_traj, strategies = solve(g, solver, x0)
 
+# define the cost function parameterized by θ ∈ R⁴:
 function parameterized_cost(θ::Vector)
     costs = (FunctionPlayerCost((g, x, u, t) -> (  θ[1]*(x[5]-x[9])^2  +  θ[2]*x[1]^2 +  2*(u[1]^2 + u[2]^2) )),
             FunctionPlayerCost((g, x, u, t) -> (  θ[3]*(x[5]-x[1])^2  +  θ[4]*(x[8]-1)^2 + 2*(u[3]^2 + u[4]^2) ))   )
@@ -53,15 +55,15 @@ end
 
 # ------------------------------------------------------------------------------------------------------------------------------------------
 "Inverse Game Porblem: infer cost from noisy incomplete, partially observed expert demo"
-GD_iter_num = 60
+GD_iter_num = 30
 num_clean_traj = 1
-noise_level_list = [0.0]
+noise_level_list = [0.02]
 num_noise_level = length(noise_level_list)
 num_obs = 1
 games = []
 x0_set = [x0 for ii in 1:num_clean_traj]
 
-"modify the clean expert demo to noisy expert demo:"
+"generate noisy expert demo:"
 c_expert,expert_traj_list,expert_equi_list=generate_traj(g,x0_set,parameterized_cost,["FBNE","FBNE"])
 noisy_expert_traj_list = [[[zero(SystemTrajectory, g) for kk in 1:num_obs] for jj in 1:num_noise_level] for ii in 1:num_clean_traj]
 for ii in 1:num_clean_traj
@@ -146,6 +148,7 @@ for ii in 1:num_clean_traj
         push!(index_list_list[ii][jj], index_list)
         push!(optim_loss_list_list[ii][jj], optim_loss_list)
         push!(ground_truth_loss_list[ii][jj], ground_truth_loss)
+        "The first run may take a long time due to precompilation!"
     end
 end
 
