@@ -1,4 +1,6 @@
 # inverse-iLQGames
+We proposed an inverse feedback games solver for general-sum games with nonlinear dynamics and non-quadratic costs.
+
 This repo contains the essential codes for the following paper:
 
 [Cost Inference for Feedback Dynamic Games from Noisy Partial State Observations and Incomplete Trajectories](https://arxiv.org/pdf/2301.01398.pdf), by Jingqi Li, Chih-Yuan Chiu, Lasse Peters, Somayeh Sojoudi, Claire Tomlin, and David Fridovich-Keil, AAMAS 2023
