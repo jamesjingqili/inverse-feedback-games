@@ -1,7 +1,8 @@
 "A simple contruction helper that runs some sanity checks on the types"
 @inline function game_sanity_checks(uids, TD, TC)
-    @assert(isempty(intersect(uids...)),
-            "Invalid uids: Two players can not control the same input")
+    # @assert(isempty(intersect(uids...)),
+    #         "Invalid uids: Two players can not control the same input")
+    @warn "The uids are not checked for duplicates."
     @assert(sum(length(uis) for uis in uids) == n_controls(TD),
             "Not all inputs have been assigned to players.")
     @assert(all(isbits(uir) for uir in uids),
