@@ -1,5 +1,5 @@
 # inverse-iLQGames
-We proposed an inverse feedback games solver for general-sum games with nonlinear dynamics and non-quadratic costs.
+We proposed the first inverse feedback games solver for general-sum games with nonlinear dynamics and non-quadratic costs.
 
 This repo contains the essential codes for the following paper:
 
