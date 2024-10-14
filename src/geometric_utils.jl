@@ -231,6 +231,7 @@ function progress(point, trajectory::ListTrajectoryPlan)
             accumulated_progress += segment_length(subtrajectory)
         end 
     end
+    println("reached end, shouldn't reach here, point: ", point)
 end
 
 function visualize(trajectory::ListTrajectoryPlan; kwargs...)
