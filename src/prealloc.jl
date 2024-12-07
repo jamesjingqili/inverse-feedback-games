@@ -65,7 +65,8 @@ function lqgame_preprocess_alloc(g::AbstractGame)
     TQ = SMatrix{nx, nx, Float64, nx*nx}
     TRL = SVector{nu, Float64}
     TRQ = SMatrix{nu, nu, Float64, nu*nu}
-    TCi = QuadraticPlayerCost{nx, nu, TL, TQ, TRL, TRQ}
+    TRS = SMatrix{nx, nu, Float64, nx*nu}
+    TCi = QuadraticPlayerCost{nx, nu, TL, TQ, TRL, TRQ, TRS}
     TC = SVector{np, TCi}
     quad_cost = SizedVector{h, TC}(undef)
 

@@ -32,7 +32,8 @@ qcache(solver::iLQSolver) = solver._qcache_mem
 
 function regularize(solver::iLQSolver, c::QuadraticPlayerCost)
     return QuadraticPlayerCost(c.l, c.Q + I * solver.state_regularization,
-                               c.r, c.R + I * solver.control_regularization)
+                               c.r, c.R + I * solver.control_regularization,
+                               c.S)
 end
 
 function iLQSolver(g, args...; kwargs...)

@@ -48,7 +48,7 @@ Represents the quadratic players costs for a singel player in a game.
 $(TYPEDFIELDS)
 """
 struct QuadraticPlayerCost{nx, nu, TL<:SVector{nx}, TQ<:SMatrix{nx, nx},
-                           TRL<:SVector{nu}, TRQ<:SMatrix{nu, nu}} <: PlayerCost
+                           TRL<:SVector{nu}, TRQ<:SMatrix{nu, nu}, TRS<:SMatrix{nx, nu}} <: PlayerCost
     "The linear state cost"
     l::TL
     "The qudratic state cost matrix"
@@ -57,10 +57,12 @@ struct QuadraticPlayerCost{nx, nu, TL<:SVector{nx}, TQ<:SMatrix{nx, nx},
     r::TRL
     "A square matrix to represent the quadratic control cost for this player"
     R::TRQ
+    "A matrix to represent the cross term between state and input"
+    S::TRS
 end
 
 (pc::QuadraticPlayerCost)(::Any, x::SVector, u::SVector) = pc(x, u)
 
 function (pc::QuadraticPlayerCost)(x::SVector, u::SVector)
-    return 1//2 * x'*pc.Q*x + pc.l'*x + 1//2 * u'*pc.R*u + pc.r'*u
+    return 1//2 * x'*pc.Q*x + pc.l'*x + 1//2 * u'*pc.R*u + pc.r'*u + x'*pc.S*u
 end

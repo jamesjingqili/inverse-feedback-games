@@ -51,7 +51,7 @@ function solve_lq_game_FBNE(g::LQGame)
             BᵢZᵢ = B[:, uidᵢ]' * Cᵢ.Z
             (
                 cᵢ.R[uidᵢ, :] + BᵢZᵢ * B,                     # rows of S
-                [(BᵢZᵢ * A) (B[:, uidᵢ]' * Cᵢ.ζ + cᵢ.r[uidᵢ])],
+                [(BᵢZᵢ * A  + 2 * cᵢ.S[:, uidᵢ]') (B[:, uidᵢ]' * Cᵢ.ζ + cᵢ.r[uidᵢ])],
             ) # rows of Y
         end
 
@@ -70,7 +70,7 @@ function solve_lq_game_FBNE(g::LQGame)
             PRᵢ = P' * cᵢ.R
             (
                 ζ = (F' * (Cᵢ.ζ + Cᵢ.Z * β) + cᵢ.l + PRᵢ * α - P' * cᵢ.r),
-                Z = (F' * Cᵢ.Z * F + cᵢ.Q + PRᵢ * P),
+                Z = (F' * Cᵢ.Z * F + cᵢ.Q + PRᵢ * P - 2 * cᵢ.S * P),
             )
         end
 
@@ -106,17 +106,28 @@ function lq_approximation(g, op, solver)
         # @infiltrate
         
         ldyn = linearize_discrete(dynamics(g), x, u, t)
-
+        nx = length(x)
+        nu = length(u)
+        xu = vcat(x, u)
         # quadratiation of the cost along the operating point
         qcost =
             map(player_costs(g)) do pc
-                x_cost = x -> pc(g, x, u, t)
-                u_cost = u -> pc(g, x, u, t)
-                l = ForwardDiff.gradient(x_cost, x)
-                Q = ForwardDiff.hessian(x_cost, x)
-                r = ForwardDiff.gradient(u_cost, u)
-                R = ForwardDiff.hessian(u_cost, u)
-                c = QuadraticPlayerCost(l, Q, r, R)
+                # x_cost = x -> pc(g, x, u, t)
+                # u_cost = u -> pc(g, x, u, t)
+                # l = ForwardDiff.gradient(x_cost, x)
+                # Q = ForwardDiff.hessian(x_cost, x)
+                # r = ForwardDiff.gradient(u_cost, u)
+                # R = ForwardDiff.hessian(u_cost, u)
+                xu_cost = xu_vec->pc(g, xu_vec[1:nx], xu_vec[nx+1:end], t)
+                # we can compute the gradient and the hessian in one go
+                jacobian = ForwardDiff.gradient(xu_cost, xu)
+                hessian = ForwardDiff.hessian(xu_cost, xu)
+                l = SVector{nx}(jacobian[1:nx])
+                Q = SMatrix{nx, nx}(hessian[1:nx, 1:nx])
+                r = SVector{nu}(jacobian[nx+1:end])
+                R = SMatrix{nu, nu}(hessian[nx+1:end, nx+1:end])
+                S = SMatrix{nx, nu}(hessian[1:nx, nx+1:end])
+                c = QuadraticPlayerCost(l, Q, r, R, S)
                 regularize(solver, c)
             end |> StaticArrays.SizedVector{n_players(g),QuadraticPlayerCost}
         @namedtuple(ldyn, qcost)
