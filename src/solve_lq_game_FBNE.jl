@@ -42,13 +42,14 @@ function solve_lq_game_FBNE!(strategies, g::LQGame)
             # the current set of rows that we construct for player ii
             S[udxᵢ, :] = cost[ii].R[udxᵢ, :] + BᵢZᵢ*B
             # append the fully constructed row to the full S-Matrix
-            YP[udxᵢ, :] = BᵢZᵢ*A
+            YP[udxᵢ, :] = BᵢZᵢ*A + 2 * cost[ii].S[:, udxᵢ]'
             Yα[udxᵢ] = B[:, udxᵢ]'*ζ[ii] + cost[ii].r[udxᵢ]
         end
 
-        Sinv = inv(SMatrix(S))
-        P = Sinv * SMatrix(YP)
-        α = Sinv * SVector(Yα)
+        # Sinv = inv(SMatrix(S))
+        SMatrix_S = SMatrix(S)
+        P = SMatrix_S \ SMatrix(YP)
+        α = SMatrix_S \ SVector(Yα)
         # compute F and β as intermediate result for estimating the cost to go
         F = A - B * P
         β = -B * α
@@ -59,7 +60,7 @@ function solve_lq_game_FBNE!(strategies, g::LQGame)
             cᵢ= cost[ii]
             PRᵢ = P' * cᵢ.R
             ζ[ii] = F' * (ζ[ii] + Z[ii] * β) + cᵢ.l + PRᵢ * α - P' * cᵢ.r
-            Z[ii] = F' * Z[ii] * F + cᵢ.Q + PRᵢ * P
+            Z[ii] = F' * Z[ii] * F  +  cᵢ.Q  +  PRᵢ * P  +  2*cᵢ.S * (-P) 
         end
         strategies[kk] = AffineStrategy(P, α)
     end

@@ -52,7 +52,8 @@ function quadraticize!(qcache::QuadCache, pc::NPlayerNavigationCost,
     quad!(qcache.Q, qcache.l, goalcost(pc), x[xi], xi, t)
 
     return QuadraticPlayerCost(SVector(qcache.l), SMatrix(qcache.Q),
-                               SVector(qcache.r), SMatrix(qcache.R))
+                               SVector(qcache.r), SMatrix(qcache.R),
+                               SMatrix(qcache.S))
 end
 
 function (pc::NPlayerNavigationCost)(g::AbstractGame, x::SVector, u::SVector, t::Float64)
