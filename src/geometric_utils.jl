@@ -222,6 +222,16 @@ function project(point, trajectory::ListTrajectoryPlan)
     return projected_points[min_index]
 end
 
+function project_and_argmin(point, trajectory::ListTrajectoryPlan)
+    # Project the point onto each subtrajectory and return the closest one 
+    projected_points = [project(point, subtrajectory) for subtrajectory in trajectory.subtrajectories]
+    distances = [norm(point - projected_point) for projected_point in projected_points]
+    min_distance, min_index = findmin(distances)
+
+    return projected_points[min_index], min_index
+end
+
+
 function progress(point, trajectory::ListTrajectoryPlan)
     accumulated_progress = 0
     for subtrajectory in trajectory.subtrajectories

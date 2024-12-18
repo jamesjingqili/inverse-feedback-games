@@ -66,6 +66,10 @@ train_demonstrations_turns = load_pickle("/data/fmri/full_dataset/SP/generated/d
 train_point_sequences = load_pickle("/data/fmri/full_dataset/SP/generated/demonstrations/train_point_sequences.pkl")
 train_demonstrations_turns_states = [train_demonstration[1] for train_demonstration in train_demonstrations_turns]
 
+# straight line data too 
+train_demonstrations_straights = load_pickle("/data/fmri/full_dataset/SP/generated/demonstrations/train_demonstrations_k_closest_vehicles=15_k_closest_pedestrians=0.pkl")
+train_demonstrations_straights_states = [train_demonstration[1] for train_demonstration in train_demonstrations_straights]
+
 # map data 
 centerline_filename = "/data/fmri/full_dataset/map_centerlines.npz"
 centerlines = npzread(centerline_filename)["lines"]
@@ -73,10 +77,52 @@ centerlines = [LineSegment(centerlines[i, 1, :], centerlines[i, 2, :]) for i in 
 
 # scale the data 1
 scaled_centerlines, scaled_demonstration_states, scaled_train_point_sequences, scaled_road_width = rescale_data(centerlines, train_demonstrations_turns_states, train_point_sequences, road_width_cm, k_closest_vehicles, k_closest_pedestrians, scaling_factor=scaling_factor)
+trajectory_plans = [trajectory_plan_from_key_points(key_points, scaled_road_width) for key_points in scaled_train_point_sequences] # just for visualization 
+
 
 # Test that you've loaded things correctly 
 visualize_road_from_key_points(scaled_train_point_sequences[1], scaled_road_width)
 savefig("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/test_trajectory_from_key_points.png")
+
+#= 
+    Trying to find a way of getting the indices of the turns 
+=# 
+
+# attempt 1 - see what indices are in the straight run demonstrations 
+n_runs = 18
+
+indices_in_straights_per_run = [Dict() for i = 1:n_runs]
+for demo in train_demonstrations_straights_states
+    for i = 1:size(demo, 1)
+        # get the run and sample index 
+        run_index = Int(demo[i, end]) + 1
+        sample_index = Int(demo[i, end-1])
+        indices_in_straights_per_run[run_index][sample_index] = true
+    end
+end
+
+# attempt 2 - check the type of segment that the position gets projected onto 
+indices_in_turns_per_demo = [Dict() for i = 1:length(train_demonstrations_turns_states)]
+for (i, demo) in enumerate(scaled_demonstration_states)
+    for j = 1:size(demo, 1)
+        position = demo[j, 1:2]
+        _, proj_index = project_and_argmin(position, trajectory_plans[i])
+        segment = trajectory_plans[i].subtrajectories[proj_index]
+        # println("demo, index: ", (i, j))
+
+        # println("position: ", position)
+        # println("proj index: ", proj_index)
+        # println("segment: ", segment)
+        if typeof(segment) <: Arc
+            println("----------added in-------")
+            println("demo, index: ", (i, j))
+            indices_in_turns_per_demo[i][j] = true 
+        end
+    end
+end
+    
+
+
 
 
 #= 
@@ -142,21 +188,38 @@ start_indices = []
 
 stride_length = 1
 
+
+only_turns = true
 for i = 1:length(scaled_demonstration_states)
-    demo_length = size(scaled_demonstration_states[i])[1]
+    demo = scaled_demonstration_states[i]
+    demo_length = size(demo)[1]
     for j = 1: stride_length: (demo_length - game_horizon + 1)
-        push!(demo_indices, i)
-        push!(start_indices, j)
+        if only_turns 
+            if haskey(indices_in_turns_per_demo[i], j)
+                push!(demo_indices, i)
+                push!(start_indices, j)
+            end 
+        else 
+            push!(demo_indices, i)
+            push!(start_indices, j)
+        end
     end
 end
 
 # data_loader = Flux.DataLoader(collect(zip(demo_indices, start_indices)), batchsize=20, shuffle=true)
 
 # next setup the costs, games, and solvers for each d, emonstration 
-for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
-    step_size = 0.1 # was 0.05 for a while 
+desired_velocity_sigmoid_scaling = 5.0
+#for desired_velocity_sigmoid_scaling ∈ [5.0]
+    step_size = 0.05 # was 0.05 for a while 
     max_batches = 20
     max_anims = 10
+    seed = 1000
+    indices_to_amplify_gradient = [2, 3, 7, 8, 10, 11, 12, 13]
+    grad_amplification = 1 
+
+    folder_name = joinpath(string("learning_rate=", step_size), string("testturnsonly2_maxbatches=", max_batches, "_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "_seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
+
     
     println("exploring desired velocity sigmoid scaling: ", desired_velocity_sigmoid_scaling)
     
@@ -165,7 +228,6 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
     ego_vehicle_costs = [generate_ego_cost(demonstration, key_points, scaled_road_width, desired_velocity_sigmoid_scaling) for (demonstration, key_points) in zip(scaled_demonstration_states, scaled_train_point_sequences)]
     games = [GeneralGame(game_horizon, player_inputs, dynamics, costs) for costs in ego_vehicle_costs]
     solvers = [iLQSolver(game,max_scale_backtrack=40, max_elwise_diff_converged = 0.05, max_elwise_diff_step = 0.1, equilibrium_type="FBNE") for game in games];
-    trajectory_plans = [trajectory_plan_from_key_points(key_points, scaled_road_width) for key_points in scaled_train_point_sequences] # just for visualization 
 
 
     # finally, run batch gradient descent 
@@ -185,6 +247,8 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
 
     # theta_0[indices_to_scale] /= param_rescaling
 
+    Random.seed!(seed)
+
 
     # start with random on interval [0, 1]
     #theta_0 = rand(n_params_to_fit)
@@ -193,18 +257,7 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
     #Random.seed!(1234)
     #Random.seed!(1111)
 
-    #
-    """
-    include("/home/chrisstrong/MRI_Driving/inverse-feedback-games/src/geometric_utils.jl")
-    include("/home/chrisstrong/MRI_Driving/inverse-feedback-games/src/data_processing_utils.jl")
-    include("/home/chrisstrong/MRI_Driving/inverse-feedback-games/src/visualization_utils.jl")
-    include("/home/chrisstrong/MRI_Driving/inverse-feedback-games/src/game_setup_utils.jl")
-
-    """
-
     n_params = 13
-    seed = 1000
-    Random.seed!(seed)
     theta_0 = rand(n_params)
     theta_0[5] = 0.25 # 1.0
     theta_0[6] = 0.25 # 1.0
@@ -215,12 +268,12 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
     losses = Float64[]
     losses_theta_0 = Float64[]
     losses_theta_guess = Float64[]
-
-    indices_to_amplify_gradient = [2, 3, 7, 8, 10, 11, 12, 13]
-    grad_amplification = 1 
+    grad_norms = Float64[]
 
 
-    for (i, batch) in enumerate(data_loader)
+    for (i, batch) in enumerate(data_loader)      
+        global cur_θ
+
         demo_indices = [data[1] for data in batch]
         start_indices = [data[2] for data in batch]
 
@@ -238,16 +291,18 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
         println("loss theta guess: ", loss_theta_guess)
 
         grad = ForwardDiff.gradient(x -> batch_loss(x,  games, solvers, scaled_demonstration_states, demo_indices, start_indices, 1:game_horizon, 1:nx, 1:nu), cur_θ)
+        push!(grad_norms, norm(grad))
 
         println("grad before amplification: ", grad)
         grad[indices_to_amplify_gradient] *= grad_amplification
+
+        push!(thetas, cur_θ) # record pre gradient update theta
 
         cur_θ = cur_θ - step_size * grad
         println("theta: ", cur_θ)
         println("grad: ", grad)
         println("time after batch ", i, " ", time() - start_time)
 
-        push!(thetas, cur_θ)
         push!(losses, cur_loss)
         push!(losses_theta_0, loss_theta_0)
         push!(losses_theta_guess, loss_theta_guess)
@@ -256,7 +311,7 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
             break 
         end
     end
-    folder_name = joinpath(string("learning_rate=", step_size), string("temp_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
+
     directory = joinpath("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations", folder_name)
     mkpath(directory)
 
@@ -293,12 +348,16 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
     end
     savefig(joinpath(directory, "thetas_all.png"))
 
+    plot()
+    plot(grad_norms, xlabel="batch", ylabel="grad norm", label="grad norm")
+    savefig(joinpath(directory, "grad_norms.png"))
+
     # animate start vs. end theta vs. theta_guess on a few examples 
     mkpath(joinpath(directory, "animations"))
     for (i, (demo_index, start_index)) in enumerate(rand(collect(data_loader))) # sample a random batch 
         println("visualizing demo index ", demo_index, " at start index ", start_index)
         # also rollout in closed loop and visualize the difference 
-        rollout_length = min(200, size(scaled_demonstration_states[demo_index], 1) - start_index - game_horizon) # so don't rollout too far if we don't have the space 
+        rollout_length = min(100, size(scaled_demonstration_states[demo_index], 1) - start_index - game_horizon) # so don't rollout too far if we don't have the space 
         println("rollout length: ", rollout_length)
 
         rollout_before = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas[1], num_steps=rollout_length)
@@ -327,6 +386,8 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
             push!(labels, "theta_guess")
         end
 
+        println("successful rollouts: ", labels)
+
         if length(rollouts) > 0
             anim_before_closedloop = animate_trajectories(rollouts, colors, labels, scaled_demonstration_states[demo_index][start_index:end, :], trajectory_plans[demo_index], scaled_road_width, scaled_centerlines, field_of_view = 10000/scaling_factor, time_spacing=5)    
             gif(anim_before_closedloop, joinpath(directory, string("animations/batch_training_demo=", demo_index, "_startindex=", start_index, ".gif")), fps=15)
@@ -338,7 +399,7 @@ for desired_velocity_sigmoid_scaling ∈ [1.0, 2.0, 5.0, 10.0]
             break
         end
     end
-end
+# end
 
 # # Poke into specific demonstration / start indices 
 # theta = thetas[end]
@@ -362,6 +423,163 @@ gif(anim, joinpath(directory, string("animations/temp_test=", demo_index, "_star
 
 
 
-# TODO:
-# try adding back in fitting of the desired velocity sigmoid. 
-# if that doesn't work just tweak it a bit and see? and then do feature generation for this setup. 
+#=
+    recreating stuff to visualize 
+
+=# 
+demo_index = 43
+start_index = 818
+
+thetas_fulldata = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.05/temp_withdiagonals_gradamp=1_desiredvelocitysigmoidscaling=5.0seed=1000/thetas.npy")
+thetas_turns = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.05/testturnsonly2_maxbatches=20_gradamp=1_desiredvelocitysigmoidscaling=5.0_seed=1000/thetas.npy")
+
+loss_final = loss(thetas_fulldata[:, end], games[demo_index], solvers[demo_index], scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)
+
+loss_guess = loss(theta_guess, games[demo_index], solvers[demo_index], scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)
+
+
+# bar plot comparing the two 
+labels = ["v desired", "θ along curve", "θ from curve", "θ velocity", "θ u1", "θ u2", "comf. distance", "distance scaling", "comf. dist. σ scale", "θ distance", "dist. curve σ scale", "dist. curve σ center", "v des. σ thresh."]
+
+labels = ["v desired", "θ along curve", "θ from curve", "θ velocity", "θ u1", "θ u2", "comf. distance", "distance scaling", "comf. dist. σ scale", "θ distance", "dist. curve σ scale", "dist. curve σ center", "v des. σ thresh."]
+
+xs = 1:5:5*length(labels)
+
+scatter(xs, thetas_fulldata[:, end], xticks=(xs, labels), ylim=[-0.1, 1.0], size=(1500, 300), markersize=5, label="Full Data")
+scatter!(xs, thetas_turns[:, end], label="Turns", markersize=5, alpha=0.5)
+savefig(joinpath(directory, "thetas_fulldata_bar.png"))
+
+
+
+# animate start vs. end theta vs. theta_guess on a few examples 
+mkpath(joinpath(directory, "animations/comparison/"))
+for (i, (demo_index, start_index)) in enumerate(rand(collect(data_loader))) # sample a random batch 
+    # start the index a second back 
+    start_index = start_index - 15
+    
+    println("visualizing demo index ", demo_index, " at start index ", start_index)
+    # also rollout in closed loop and visualize the difference 
+    rollout_length = min(100, size(scaled_demonstration_states[demo_index], 1) - start_index - game_horizon) # so don't rollout too far if we don't have the space 
+    println("rollout length: ", rollout_length)
+
+    rollout_before = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas[1], num_steps=rollout_length)
+    rollout_after = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas_turns[:, end], num_steps=rollout_length)
+    rollout_theta_guess = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = theta_guess, num_steps=rollout_length)
+
+    rollout_theta_fulldata = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas_fulldata[:, end], num_steps=rollout_length)
+
+    rollouts = []
+    colors = []
+    labels = []
+
+    if ~isnothing(rollout_before)
+        push!(rollouts, rollout_before)
+        push!(colors, "red")
+        push!(labels, "theta_0")
+    end
+
+    if ~isnothing(rollout_after)
+        push!(rollouts, rollout_after)
+        push!(colors, "yellow")
+        push!(labels, "theta turns")
+    end
+
+    if ~isnothing(rollout_theta_guess)
+        push!(rollouts, rollout_theta_guess)
+        push!(colors, "pink")
+        push!(labels, "theta_guess")
+    end
+
+    if ~isnothing(rollout_theta_fulldata)
+        push!(rollouts, rollout_theta_fulldata)
+        push!(colors, "black")
+        push!(labels, "theta full data")
+    end
+
+    println("successful rollouts: ", labels)
+
+    if length(rollouts) > 0
+        anim_before_closedloop = animate_trajectories(rollouts, colors, labels, scaled_demonstration_states[demo_index][start_index:end, :], trajectory_plans[demo_index], scaled_road_width, scaled_centerlines, field_of_view = 10000/scaling_factor, time_spacing=5)    
+        gif(anim_before_closedloop, joinpath(directory, string("animations/comparison/batch_training_demo=", demo_index, "_startindex=", start_index, ".gif")), fps=15)
+    else
+        println("no successful rollouts!!!!!!!")
+    end
+
+    if i >= max_anims
+        break
+    end
+end
+
+
+# bar(xs, thetas_fulldata[:, end], xticks=xs, labels=labels, bar_width=0.5)
+# savefig(joinpath(directory, "thetas_fulldata_bar.png"))
+
+# bar(labels, thetas_fulldata[:, end], xticks=(1:5:5*length(labels), labels), bar_width=0.5)
+# savefig(joinpath(directory, "thetas_fulldata_bar.png"))
+
+
+
+# desired_velocity_sigmoid_scaling = 5.0
+# grad_amplification = 1
+# step_size = 0.05
+# seed = 1000
+# max_anims = 10
+
+
+# ego_vehicle_costs = [generate_ego_cost(demonstration, key_points, scaled_road_width, desired_velocity_sigmoid_scaling) for (demonstration, key_points) in zip(scaled_demonstration_states, scaled_train_point_sequences)]
+# games = [GeneralGame(game_horizon, player_inputs, dynamics, costs) for costs in ego_vehicle_costs]
+# solvers = [iLQSolver(game,max_scale_backtrack=40, max_elwise_diff_converged = 0.05, max_elwise_diff_step = 0.1, equilibrium_type="FBNE") for game in games];
+# trajectory_plans = [trajectory_plan_from_key_points(key_points, scaled_road_width) for key_points in scaled_train_point_sequences] # just for visualization 
+
+
+data_loader = Flux.DataLoader(collect(zip(demo_indices, start_indices)), batchsize=20, shuffle=true)
+folder_name = joinpath(string("learning_rate=", step_size), string("temp_withdiagonals_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
+
+directory = joinpath("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations", folder_name)
+ # animate start vs. end theta vs. theta_guess on a few examples 
+ mkpath(joinpath(directory, "animations"))
+ for (i, (demo_index, start_index)) in enumerate(rand(collect(data_loader))) # sample a random batch 
+     println("visualizing demo index ", demo_index, " at start index ", start_index)
+     # also rollout in closed loop and visualize the difference 
+     rollout_length = min(100, size(scaled_demonstration_states[demo_index], 1) - start_index - game_horizon) # so don't rollout too far if we don't have the space 
+     println("rollout length: ", rollout_length)
+
+     rollout_before = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas[:, 1], num_steps=rollout_length)
+     rollout_after = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas[:, end], num_steps=rollout_length)
+     rollout_theta_guess = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = theta_guess, num_steps=rollout_length)
+
+     rollouts = []
+     colors = []
+     labels = []
+
+     if ~isnothing(rollout_before)
+         push!(rollouts, rollout_before)
+         push!(colors, "red")
+         push!(labels, "theta_0")
+     end
+
+     if ~isnothing(rollout_after)
+         push!(rollouts, rollout_after)
+         push!(colors, "yellow")
+         push!(labels, "theta_final")
+     end
+
+     if ~isnothing(rollout_theta_guess)
+         push!(rollouts, rollout_theta_guess)
+         push!(colors, "pink")
+         push!(labels, "theta_guess")
+     end
+
+     println("successful rollouts: ", labels)
+
+     if length(rollouts) > 0
+         anim_before_closedloop = animate_trajectories(rollouts, colors, labels, scaled_demonstration_states[demo_index][start_index:end, :], trajectory_plans[demo_index], scaled_road_width, scaled_centerlines, field_of_view = 10000/scaling_factor, time_spacing=5)    
+         gif(anim_before_closedloop, joinpath(directory, string("animations/batch_training_demo=", demo_index, "_startindex=", start_index, ".gif")), fps=15)
+     else
+         println("no successful rollouts!!!!!!!")
+     end
+
+     if i >= max_anims
+         break
+     end
+ end
