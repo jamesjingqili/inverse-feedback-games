@@ -13,29 +13,6 @@ dynamics = SingleUnicycleAugmentedTT()
 
 # Other cost parameters
 k_closest_vehicles_for_cost = 5
-# ego_v_desired = 600 / scaling_factor 
-
-# ego_weight_distance_along_curve = 0.02
-# ego_weight_distance_from_curve = 10.0
-# ego_weight_velocity = 5.0
-# ego_weight_control_1 = 1.0 / (scaling_factor / 1000)^2 / (angular_control_scaling)^2
-# ego_weight_control_2 = 1.0 / (scaling_factor / 1000)^2 / (velocity_control_scaling)^2
-
-# ego_comfortable_distance = 900 / scaling_factor 
-# scaling_distance_from_curve = 3.0
-# comfortable_distance_sigmoid_scaling = 10.0
-
-# ego_weight_distance = 1.0
-
-# distance_from_curve_sigmoid_scaling = 30.0 
-# distance_from_curve_sigmoid_center = 0.2
-
-# grad: [0.015541904239820539, 0.033495314428013984, 3.7310457649647386e-5, 0.0007035514573461447, 0.0, 0.0, -0.004905184849759084, 2.9369973944833737e-5, -2.2637666114260647e-5, -0.0006035777038070444, 9.508400944270543e-6, -0.0018210735903533173]
-
-
-# desired_velocity_sigmoid_scaling = 10.0
-desired_velocity_sigmoid_threshold = 1400 / 2000 # scaling factor 
-
 
 function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity_sigmoid_scaling)
 
@@ -47,7 +24,6 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
     end 
     
     function ego_vehicle_cost(g, x, u, t)
-        #println("t: ", t, " u: ", u)
         # cost for ego vehicle
         ego_x, ego_y, ego_phi, ego_v, start_time = x[1:5]
 
@@ -55,9 +31,6 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
         ego_v_desired, ego_weight_distance_along_curve, ego_weight_distance_from_curve, ego_weight_velocity, ego_weight_control_1,
         ego_weight_control_2, ego_comfortable_distance, scaling_distance_from_curve, comfortable_distance_sigmoid_scaling, ego_weight_distance,
         distance_from_curve_sigmoid_scaling, distance_from_curve_sigmoid_center, desired_velocity_sigmoid_threshold = x[6:18]
-        
-        #println("sigmoid scaling: ", desired_velocity_sigmoid_scaling)
-
         
         # rescaling
         # 1    0.3 - small - ego_v_desired 
@@ -73,7 +46,7 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
         # 11   30.0 - large - distance_from_curve_sigmoid_scaling
         # 12    0.2 - small - distance_from_curve_sigmoid_center 
 
-        # 13                  desired_velocity_sigmoid_threshold
+        # 13    0.7 - small - desired_velocity_sigmoid_threshold
 
         # parameters that are large we'd like to scale to be a similar size, so we'll scale them up by a factor of 20 here 
         # and then the initial theta we can initialize to some random 0 to 1 thing?  
@@ -87,11 +60,6 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
         scaling_distance_from_curve = scaling_distance_from_curve * param_rescaling 
         comfortable_distance_sigmoid_scaling = comfortable_distance_sigmoid_scaling * param_rescaling 
         distance_from_curve_sigmoid_scaling = distance_from_curve_sigmoid_scaling * param_rescaling
-
-
-        # ego_v_desired, ego_weight_distance_along_curve, ego_weight_distance_from_curve, ego_weight_velocity, ego_weight_control_1, 
-        # ego_weight_control_2, ego_comfortable_distance, scaling_distance_from_curve, comfortable_distance_sigmoid_scaling, ego_weight_distance, 
-        # distance_from_curve_sigmoid_scaling, distance_from_curve_sigmoid_center, desired_velocity_sigmoid_scaling, desired_velocity_sigmoid_threshold  = x[6:19]
 
         ego_distance_along_curve, ego_distance_from_curve = wrapper_fcn([ego_x, ego_y])
         cur_cost = 0
@@ -131,16 +99,13 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
 
         # TODO: try sigmoid on the weight for v desired rather than on the desired velocity itself 
         v_desired_modified = ego_v_desired * sigmoid(desired_velocity_sigmoid_scaling * (closest_car_in_front - desired_velocity_sigmoid_threshold)) #ego_v_desired * sigmoid(desired_velocity_sigmoid_scaling * (closest_car_in_front - ego_comfortable_distance)) # desired_velocity_sigmoid_threshold)) # 1 / (1 + exp(-sigmoid_scaling*(closest_car_in_front - sigmoid_threshold))) * ego_v_desired 
-        #v_desired_modified = ego_v_desired
 
-        # v_weight_modified = ego_weight_velocity * sigmoid(desired_velocity_sigmoid_scaling * (closest_car_in_front - ego_comfortable_distance))
-
-
-        # cost includind distance along curve, distance from curve, speed, and control cost 
         distance_from_curve_component = ego_weight_distance_from_curve * ego_distance_from_curve^2 * sigmoid(distance_from_curve_sigmoid_scaling*(ego_distance_from_curve - distance_from_curve_sigmoid_center))
         # cur_cost += -ego_weight_distance_along_curve * ego_distance_along_curve^2 + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
         # cur_cost += -ego_weight_distance_along_curve * ego_distance_along_curve^2 + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
         # cur_cost += -ego_weight_distance_along_curve * (next_ego_distance_along_curve - ego_distance_along_curve) + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
+        
+        # tracking along the curve, velocity, and control costs 
         cur_cost += distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
 
         # account for progress by adding distance along curve at start and subtracting distance along curve at end. 
@@ -153,6 +118,8 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
 
         return cur_cost
     end
+
+
 
     return (FunctionPlayerCost(ego_vehicle_cost),)
 end

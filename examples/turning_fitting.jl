@@ -160,10 +160,24 @@ grad = ForwardDiff.gradient(x -> loss(x, g, solver, scaled_demonstration_states[
 println("loss: ", loss_val)
 println("grad: ", grad)
 
+
 θ_after = θ_initial - 0.1 * grad
 loss_val_after = loss(θ_after, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)
 println("loss after: ", loss_val_after)
 
+# ForwardDiff.jacobian(y -> ForwardDiff.jacobian(x -> [loss(x, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)], y), θ_initial)
+# hess = ForwardDiff.hessian(x -> loss(x, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu), θ_initial)
+# println("hessian: ", hess)
+
+# θ_after_hess = θ_initial - inv(hess) * grad
+# loss_val_after_hess = loss(θ_after_hess, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)
+# println("loss after newton: ", loss_val_after_hess)
+
+θ = θ_initial
+#grad_flux = Flux.gradient(x -> loss(x, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu), θ)
+grad_forwarddiff = ForwardDiff.gradient(x -> loss(x, g, solver, scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu), θ)
+opt = Descent(0.1) # Gradient descent with learning rate 0.1
+Flux.update!(opt, θ, grad)
 
 # visualize the difference between the trajectories from this single step 
 trajectory_plan = trajectory_plan_from_key_points(scaled_train_point_sequences[demo_index], scaled_road_width)
@@ -189,7 +203,7 @@ start_indices = []
 stride_length = 1
 
 
-only_turns = true
+only_turns = false
 for i = 1:length(scaled_demonstration_states)
     demo = scaled_demonstration_states[i]
     demo_length = size(demo)[1]
@@ -211,14 +225,18 @@ end
 # next setup the costs, games, and solvers for each d, emonstration 
 desired_velocity_sigmoid_scaling = 5.0
 #for desired_velocity_sigmoid_scaling ∈ [5.0]
-    step_size = 0.05 # was 0.05 for a while 
-    max_batches = 20
+
+    step_size = 0.005 # was 0.05 for a while 
+    max_batches = 200
     max_anims = 10
     seed = 1000
     indices_to_amplify_gradient = [2, 3, 7, 8, 10, 11, 12, 13]
     grad_amplification = 1 
 
-    folder_name = joinpath(string("learning_rate=", step_size), string("testturnsonly2_maxbatches=", max_batches, "_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "_seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
+    # opt = Descent(step_size)
+    opt = ADAM(step_size, (0.9, 0.999))
+
+    folder_name = joinpath(string("learning_rate=", step_size), string("12_20_2024_adamteststraights_batches=", max_batches, "_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "_seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
 
     
     println("exploring desired velocity sigmoid scaling: ", desired_velocity_sigmoid_scaling)
@@ -262,7 +280,7 @@ desired_velocity_sigmoid_scaling = 5.0
     theta_0[5] = 0.25 # 1.0
     theta_0[6] = 0.25 # 1.0
 
-    cur_θ = theta_0
+    cur_θ = copy(theta_0)
 
     thetas = Vector{Float64}[]
     losses = Float64[]
@@ -296,9 +314,10 @@ desired_velocity_sigmoid_scaling = 5.0
         println("grad before amplification: ", grad)
         grad[indices_to_amplify_gradient] *= grad_amplification
 
-        push!(thetas, cur_θ) # record pre gradient update theta
+        push!(thetas, copy(cur_θ)) # record pre gradient update theta
 
-        cur_θ = cur_θ - step_size * grad
+        update!(opt, cur_θ, grad)
+        #cur_θ = cur_θ - step_size * grad
         println("theta: ", cur_θ)
         println("grad: ", grad)
         println("time after batch ", i, " ", time() - start_time)
@@ -431,7 +450,9 @@ demo_index = 43
 start_index = 818
 
 thetas_fulldata = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.05/temp_withdiagonals_gradamp=1_desiredvelocitysigmoidscaling=5.0seed=1000/thetas.npy")
-thetas_turns = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.05/testturnsonly2_maxbatches=20_gradamp=1_desiredvelocitysigmoidscaling=5.0_seed=1000/thetas.npy")
+thetas_turns = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.05/12_19_2024_adamtest=200_gradamp=1_desiredvelocitysigmoidscaling=5.0_seed=1000/thetas.npy")
+thetas_adam_fulldata = npzread("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualizations/learning_rate=0.005/12_19_2024_adamteststraights_batches=200_gradamp=1_desiredvelocitysigmoidscaling=5.0_seed=1000/thetas.npy")
+
 
 loss_final = loss(thetas_fulldata[:, end], games[demo_index], solvers[demo_index], scaled_demonstration_states[demo_index], start_index, 1:game_horizon, 1:nx, 1:nu)
 
@@ -463,7 +484,7 @@ for (i, (demo_index, start_index)) in enumerate(rand(collect(data_loader))) # sa
     println("rollout length: ", rollout_length)
 
     rollout_before = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas[1], num_steps=rollout_length)
-    rollout_after = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas_turns[:, end], num_steps=rollout_length)
+    rollout_after = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas_adam_fulldata[:, end], num_steps=rollout_length)
     rollout_theta_guess = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = theta_guess, num_steps=rollout_length)
 
     rollout_theta_fulldata = rollout_trajectory(games[demo_index], solvers[demo_index], dynamics, scaled_demonstration_states[demo_index], start_index, θ = thetas_fulldata[:, end], num_steps=rollout_length)
@@ -481,7 +502,7 @@ for (i, (demo_index, start_index)) in enumerate(rand(collect(data_loader))) # sa
     if ~isnothing(rollout_after)
         push!(rollouts, rollout_after)
         push!(colors, "yellow")
-        push!(labels, "theta turns")
+        push!(labels, "theta ADAM full data")
     end
 
     if ~isnothing(rollout_theta_guess)
