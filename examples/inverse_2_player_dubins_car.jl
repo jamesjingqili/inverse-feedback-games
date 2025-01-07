@@ -25,7 +25,7 @@ struct DoubleUnicycle <: ControlSystem{ΔT,nx,nu} end
 dx(cs::DoubleUnicycle, x, u, t) = SVector(x[4]cos(x[3]), x[4]sin(x[3]), u[1], u[2], 
                                     x[8]cos(x[7]), x[8]sin(x[7]), u[3], u[4],0)
 dynamics = DoubleUnicycle()
-costs = (FunctionPlayerCost((g, x, u, t) -> (  8*(x[5]-x[9] )^2 +  2*(u[1]^2 + u[2]^2) )),
+costs = (FunctionPlayerCost((g, x, u, t) -> (  8*(x[5]-x[9] )^2 +  (2*u[1]^2 + u[2]^2) )),
         FunctionPlayerCost((g, x, u, t) -> (  4*(x[5]-x[1])^2  +  4*(x[8]-1)^2 + 2*(u[3]^2 + u[4]^2) ))   )
 
 # indices of inputs that each player controls
@@ -45,7 +45,7 @@ c, expert_traj, strategies = solve(g, solver, x0)
 
 # define the cost function parameterized by θ ∈ R⁴:
 function parameterized_cost(θ::Vector)
-    costs = (FunctionPlayerCost((g, x, u, t) -> (  θ[1]*(x[5]-x[9])^2   +  θ[2]*(u[1]^2 + u[2]^2) )),
+    costs = (FunctionPlayerCost((g, x, u, t) -> (  θ[1]*(x[5]-x[9])^2   +  (θ[2]*u[1]^2 + u[2]^2) )),
             FunctionPlayerCost((g, x, u, t) -> (  θ[3]*(x[5]-x[1])^2  +  θ[4]*(x[8]-1)^2 + 2*(u[3]^2 + u[4]^2) ))   )
     return costs
 end
@@ -57,7 +57,7 @@ end
 "Inverse Game Porblem: infer cost from noisy incomplete, partially observed expert demo"
 GD_iter_num = 30
 num_clean_traj = 1
-noise_level_list = [0.02]
+noise_level_list = [0.01]
 num_noise_level = length(noise_level_list)
 num_obs = 1
 games = []
@@ -97,7 +97,7 @@ ground_truth_loss_list = deepcopy(conv_table_list);
 init_x0_list = deepcopy(conv_table_list);
 
 "define initial solution of θ:"
-θ₀ = [1,1,1,1];
+θ₀ = 4*[1,1,1,1];
 
 
 
@@ -105,7 +105,7 @@ init_x0_list = deepcopy(conv_table_list);
 
 "define the partial observation and incomplete expert demonstrations:"
 obs_time_list= [1,2,3,4,5,6,7,8,9,10,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39]
-obs_state_list = [1,2,3,5,6,7]
+obs_state_list = [1,2,3,4,5,6,7,8]
 obs_control_list = 1:nu
 
 
@@ -133,7 +133,7 @@ for ii in 1:num_clean_traj
                                                                                                 noisy_expert_traj_list[ii][jj], parameterized_cost, GD_iter_num, 20, 1e-4, 
                                                                                                 obs_time_list,obs_state_list, obs_control_list, "FBNE", 0.000000001, 
                                                                                                 true, 10.0,expert_traj_list[ii],false,false,[],true,
-                                                                                                10, 0.01, 0.1)
+                                                                                                10, 0.01, 0.2)
         θ_list, index_list, optim_loss_list = get_the_best_possible_reward_estimate_single(init_x0, ["FBNE","FBNE"], sol_table, loss_table, equi_table)
 
         push!(conv_table_list[ii][jj], conv_table)
@@ -151,4 +151,13 @@ for ii in 1:num_clean_traj
         "The first run may take a long time due to precompilation!"
     end
 end
+
+# plot the loss trajectory
+
+
+using Plots
+ENV["GKSwstype"] = "nul" 
+plot()
+plot!(loss_table_list[1][1][:], label="loss", title="loss trajectory", xlabel="iteration", ylabel="loss")
+savefig("loss_trajectory.png")
 
