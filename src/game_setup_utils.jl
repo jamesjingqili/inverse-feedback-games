@@ -64,6 +64,8 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
         ego_distance_along_curve, ego_distance_from_curve = wrapper_fcn([ego_x, ego_y])
         cur_cost = 0
 
+        # --- up to here in converting to feature gen function 
+
         # get index of this time step 
         # round t / delta T to an int 
         t_index = floor(Int, (start_time + t) / ΔT) + 1
@@ -99,12 +101,8 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
 
         # TODO: try sigmoid on the weight for v desired rather than on the desired velocity itself 
         v_desired_modified = ego_v_desired * sigmoid(desired_velocity_sigmoid_scaling * (closest_car_in_front - desired_velocity_sigmoid_threshold)) #ego_v_desired * sigmoid(desired_velocity_sigmoid_scaling * (closest_car_in_front - ego_comfortable_distance)) # desired_velocity_sigmoid_threshold)) # 1 / (1 + exp(-sigmoid_scaling*(closest_car_in_front - sigmoid_threshold))) * ego_v_desired 
-
         distance_from_curve_component = ego_weight_distance_from_curve * ego_distance_from_curve^2 * sigmoid(distance_from_curve_sigmoid_scaling*(ego_distance_from_curve - distance_from_curve_sigmoid_center))
-        # cur_cost += -ego_weight_distance_along_curve * ego_distance_along_curve^2 + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
-        # cur_cost += -ego_weight_distance_along_curve * ego_distance_along_curve^2 + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
-        # cur_cost += -ego_weight_distance_along_curve * (next_ego_distance_along_curve - ego_distance_along_curve) + distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
-        
+
         # tracking along the curve, velocity, and control costs 
         cur_cost += distance_from_curve_component + ego_weight_velocity * (ego_v - v_desired_modified)^2 + ego_weight_control_1 * u[1]^2 + ego_weight_control_2 * u[2]^2
 
@@ -119,7 +117,48 @@ function generate_ego_cost(demo, key_points, scaled_road_width, desired_velocity
         return cur_cost
     end
 
+    # The previous cost function but accumulating features as we go 
+    # and returning that list of features and feature names
 
+    function features_from_moment_in_horizon(g, x, u, t, i, x0)
+        features = []
+        feature_names = []
+
+        # cost for ego vehicle
+        ego_x, ego_y, ego_phi, ego_v, start_time = x[1:5]
+
+        t_str = "t="*string(round(t, digits=3))*"_"
+
+
+        # parameters 
+        ego_v_desired, ego_weight_distance_along_curve, ego_weight_distance_from_curve, ego_weight_velocity, ego_weight_control_1,
+        ego_weight_control_2, ego_comfortable_distance, scaling_distance_from_curve, comfortable_distance_sigmoid_scaling, ego_weight_distance,
+        distance_from_curve_sigmoid_scaling, distance_from_curve_sigmoid_center, desired_velocity_sigmoid_threshold = x[6:18]
+        
+        param_rescaling = 10
+        ego_weight_distance_along_curve = ego_weight_distance_along_curve * param_rescaling
+        ego_weight_distance_from_curve = ego_weight_distance_from_curve * param_rescaling 
+        ego_weight_velocity = ego_weight_velocity * param_rescaling
+        scaling_distance_from_curve = scaling_distance_from_curve * param_rescaling 
+        comfortable_distance_sigmoid_scaling = comfortable_distance_sigmoid_scaling * param_rescaling 
+        distance_from_curve_sigmoid_scaling = distance_from_curve_sigmoid_scaling * param_rescaling
+
+        ego_distance_along_curve, ego_distance_from_curve = wrapper_fcn([ego_x, ego_y])
+        cur_cost = 0
+
+        # absolute coordinates 
+        append!(features, [ego_x, ego_y, ego_phi, ego_v]) # 1-4
+        append!(feature_names, ["ego_x_global", "ego_y_global", "ego_phi_global", "ego_v_global"])
+
+        if t > 0.0
+            # append relative features
+
+        end
+
+        # TODO: test how many iterations the actual cost will have, game_horizon or game_horizon + 1?
+
+
+    end
 
     return (FunctionPlayerCost(ego_vehicle_cost),)
 end

@@ -34,6 +34,8 @@ if include_things
     import Base.length
     using BenchmarkTools
     using Flux
+    using Flux.Optimise: update!
+
     using ImageFiltering
     using LazySets
     using LinearAlgebra
@@ -227,7 +229,7 @@ desired_velocity_sigmoid_scaling = 5.0
 #for desired_velocity_sigmoid_scaling ∈ [5.0]
 
     step_size = 0.005 # was 0.05 for a while 
-    max_batches = 200
+    max_batches = 20
     max_anims = 10
     seed = 1000
     indices_to_amplify_gradient = [2, 3, 7, 8, 10, 11, 12, 13]
