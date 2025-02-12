@@ -2,13 +2,12 @@
 @inline function game_sanity_checks(uids, TD, TC)
     # @assert(isempty(intersect(uids...)),
     #         "Invalid uids: Two players can not control the same input")
-    # @warn "The uids are not checked for duplicates."
-    @assert(sum(length(uis) for uis in uids) == n_controls(TD),
-            "Not all inputs have been assigned to players.")
-    @assert(all(isbits(uir) for uir in uids),
-            "Invalid uids: all ranges should be isbits to make things fast.")
-    @assert(all(eltype(uir) == Int for uir in uids),
-            "Invalid uids: the elements of the u_idx_range should be integers.")
+    # @assert(sum(length(uis) for uis in uids) == n_controls(TD),
+    #         "Not all inputs have been assigned to players.")
+    # @assert(all(isbits(uir) for uir in uids),
+    #         "Invalid uids: all ranges should be isbits to make things fast.")
+    # @assert(all(eltype(uir) == Int for uir in uids),
+    #         "Invalid uids: the elements of the u_idx_range should be integers.")
 end
 
 

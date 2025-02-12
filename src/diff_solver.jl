@@ -51,7 +51,7 @@ function solve_lq_game_FBNE(g::LQGame)
             BᵢZᵢ = B[:, uidᵢ]' * Cᵢ.Z
             (
                 cᵢ.R[uidᵢ, :] + BᵢZᵢ * B,                     # rows of S
-                [(BᵢZᵢ * A  + 2 * cᵢ.S[:, uidᵢ]') (B[:, uidᵢ]' * Cᵢ.ζ + cᵢ.r[uidᵢ])],
+                [(BᵢZᵢ * A  + 1 * cᵢ.S[:, uidᵢ]') (B[:, uidᵢ]' * Cᵢ.ζ + cᵢ.r[uidᵢ])],
             ) # rows of Y
         end
 
@@ -70,7 +70,7 @@ function solve_lq_game_FBNE(g::LQGame)
             PRᵢ = P' * cᵢ.R
             (
                 ζ = (F' * (Cᵢ.ζ + Cᵢ.Z * β) + cᵢ.l + PRᵢ * α - P' * cᵢ.r),
-                Z = (F' * Cᵢ.Z * F + cᵢ.Q + PRᵢ * P - 2 * cᵢ.S * P),
+                Z = (F' * Cᵢ.Z * F + cᵢ.Q + PRᵢ * P - 1 * cᵢ.S * P - P' * cᵢ.S'),
             )
         end
 
