@@ -91,19 +91,21 @@ savefig("/home/chrisstrong/MRI_Driving/inverse-feedback-games/examples/visualiza
 =# 
 
 # attempt 1 - see what indices are in the straight run demonstrations 
-n_runs = 18
-
-indices_in_straights_per_run = [Dict() for i = 1:n_runs]
-for demo in train_demonstrations_straights_states
-    for i = 1:size(demo, 1)
-        # get the run and sample index 
-        run_index = Int(demo[i, end]) + 1
-        sample_index = Int(demo[i, end-1])
-        indices_in_straights_per_run[run_index][sample_index] = true
-    end
-end
+# n_runs = 18
+# indices_in_straights_per_run = [Dict() for i = 1:n_runs]
+# for demo in train_demonstrations_straights_states
+#     for i = 1:size(demo, 1)
+#         # get the run and sample index 
+#         run_index = Int(demo[i, end]) + 1
+#         sample_index = Int(demo[i, end-1])
+#         indices_in_straights_per_run[run_index][sample_index] = true
+#     end
+# end
 
 # attempt 2 - check the type of segment that the position gets projected onto 
+pad_before = 15
+pad_after = 15
+
 indices_in_turns_per_demo = [Dict() for i = 1:length(train_demonstrations_turns_states)]
 for (i, demo) in enumerate(scaled_demonstration_states)
     for j = 1:size(demo, 1)
@@ -119,6 +121,13 @@ for (i, demo) in enumerate(scaled_demonstration_states)
             println("----------added in-------")
             println("demo, index: ", (i, j))
             indices_in_turns_per_demo[i][j] = true 
+            # super inefficient but not an issue with the amount of data we're dealing with
+            for k = (j - pad_before):(j + pad_after)
+                if k >=0 && k <= size(demo, 1)
+                    println("padding adding in demo, ", (i, k))
+                    indices_in_turns_per_demo[i][k] = true 
+                end
+            end
         end
     end
 end
@@ -205,7 +214,7 @@ start_indices = []
 stride_length = 1
 
 
-only_turns = false
+only_turns = true
 for i = 1:length(scaled_demonstration_states)
     demo = scaled_demonstration_states[i]
     demo_length = size(demo)[1]
@@ -229,7 +238,7 @@ desired_velocity_sigmoid_scaling = 5.0
 #for desired_velocity_sigmoid_scaling ∈ [5.0]
 
     step_size = 0.005 # was 0.05 for a while 
-    max_batches = 20
+    max_batches = 5
     max_anims = 10
     seed = 1000
     indices_to_amplify_gradient = [2, 3, 7, 8, 10, 11, 12, 13]
@@ -238,7 +247,7 @@ desired_velocity_sigmoid_scaling = 5.0
     # opt = Descent(step_size)
     opt = ADAM(step_size, (0.9, 0.999))
 
-    folder_name = joinpath(string("learning_rate=", step_size), string("12_20_2024_adamteststraights_batches=", max_batches, "_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "_seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
+    folder_name = joinpath(string("learning_rate=", step_size), string("2_3_2025_adamtestturns_batches=", max_batches, "_gradamp=", grad_amplification, "_desiredvelocitysigmoidscaling=", desired_velocity_sigmoid_scaling, "_seed=", seed)) # "matched_initialguess_control_cost_modified_vdesired_scaling_diffseed"
 
     
     println("exploring desired velocity sigmoid scaling: ", desired_velocity_sigmoid_scaling)
@@ -338,6 +347,9 @@ desired_velocity_sigmoid_scaling = 5.0
 
     # save the thetas, losses
     npzwrite(joinpath(directory, "thetas.npy"), reduce(hcat, thetas))
+    npzwrite(joinpath(directory, "theta_0.npy"), theta_0)
+    npzwrite(joinpath(directory, "theta_guess.npy"), theta_guess)
+
     npzwrite(joinpath(directory, "losses.npy"), losses)
     npzwrite(joinpath(directory, "losses_theta_0.npy"), losses_theta_0)
     npzwrite(joinpath(directory, "losses_theta_guess.npy"), losses_theta_guess)
